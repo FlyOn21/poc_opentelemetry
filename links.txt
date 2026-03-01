@@ -1,0 +1,7 @@
+https://github.com/open-telemetry/opentelemetry-collector/blob/main/examples/local/otel-config.yaml
+
+tempo
+https://grafana.com/docs/tempo/latest/configuration/
+https://github.com/grafana/adventure/blob/main/tempo.yaml
+loki
+https://grafana.com/docs/loki/latest/configure/

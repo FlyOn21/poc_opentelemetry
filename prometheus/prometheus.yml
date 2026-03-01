@@ -1,0 +1,12 @@
+# Prometheus — конфігурація
+# Метрики надходять через remote write від Fluent Bit
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

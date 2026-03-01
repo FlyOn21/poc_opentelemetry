@@ -1,0 +1,123 @@
+# =============================================================
+# FastAPI + OpenTelemetry + OTel Collector + Grafana — Docker Compose
+# =============================================================
+#
+# Архітектура:
+#
+#   FastAPI ──OTLP/HTTP──> OTel Collector ──otlphttp──────> Tempo       (трейси)
+#     :8000       :4318    │              ──prometheusrw──> Prometheus  (метрики)
+#                          │              ──otlphttp──────> Loki        (логи)
+#                          └── processors: memory_limiter, batch
+#
+#                          Grafana (Loki + Tempo + Prometheus)
+#
+# Запуск:     podman-compose up -d --build
+# Зупинка:    podman-compose down -v
+# Логи:       podman logs fastapi-demo
+#
+
+services:
+  # ─── FastAPI додаток з OpenTelemetry ─────────────────────
+  fastapi:
+    build: .
+    container_name: fastapi-demo
+    ports:
+      - "8000:8000"              # API
+    environment:
+      - OTEL_SERVICE_NAME=fastapi-demo
+      - OTEL_SERVICE_VERSION=1.0.0
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_ENABLED=true
+      - CHAIN_TARGET_URL=http://fastapi:8000
+    depends_on:
+      - otel-collector
+    mem_limit: 256m
+    restart: unless-stopped
+
+  # ─── OpenTelemetry Collector — OTLP receiver + router ───
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    container_name: otel-collector
+    command: ["--config=/etc/otelcol/otel-collector.yaml"]
+    ports:
+      - "4317:4317"              # OTLP gRPC
+      - "4318:4318"              # OTLP HTTP
+    volumes:
+      - ./otel-collector/otel-collector.yaml:/etc/otelcol/otel-collector.yaml:ro
+    depends_on:
+      - tempo
+      - loki
+      - prometheus
+    mem_limit: 256m
+    restart: unless-stopped
+
+  # ─── Grafana Tempo — trace backend ──────────────────────
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: tempo
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    ports:
+      - "3200:3200"              # Tempo query API
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/tmp/tempo
+    mem_limit: 512m
+    restart: unless-stopped
+
+  # ─── Grafana Loki — log backend ─────────────────────────
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: loki
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    ports:
+      - "3100:3100"              # Loki API
+    volumes:
+      - ./loki/loki.yaml:/etc/loki/local-config.yaml:ro
+      - loki-data:/tmp/loki
+    mem_limit: 512m
+    restart: unless-stopped
+
+  # ─── Prometheus — metrics backend ───────────────────────
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-remote-write-receiver"
+      - "--storage.tsdb.retention.time=2h"
+    ports:
+      - "9090:9090"              # Prometheus UI
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    mem_limit: 512m
+    restart: unless-stopped
+
+  # ─── Grafana — visualization ────────────────────────────
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: grafana
+    ports:
+      - "3000:3000"              # Grafana UI
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./grafana/dashboards-provisioning.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - loki
+      - tempo
+      - prometheus
+    mem_limit: 256m
+    restart: unless-stopped
+
+volumes:
+  tempo-data:
+  loki-data:
+  prometheus-data:
+  grafana-data:

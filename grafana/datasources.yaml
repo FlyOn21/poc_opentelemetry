@@ -1,0 +1,47 @@
+# Grafana — автоматичне налаштування datasources
+# Цей файл монтується у /etc/grafana/provisioning/datasources/
+
+apiVersion: 1
+
+datasources:
+  # Loki — логи (OTel logs через Collector)
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: true
+    editable: true
+    jsonData:
+      derivedFields:
+        - matcherType: label
+          matcherRegex: 'trace_id'
+          name: TraceID
+          url: '/explore?orgId=1&left=%7B%22datasource%22%3A%22tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22queryType%22%3A%22traceql%22%2C%22query%22%3A%22$${__value.raw}%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-1h%22%2C%22to%22%3A%22now%22%7D%7D'
+          urlDisplayLabel: View trace in Tempo
+          openInNewTab: true
+
+  # Tempo — трейси (distributed tracing)
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: true
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        filterByTraceID: false
+        filterBySpanID: false
+        customQuery: true
+        query: '{service_name="fastapi-demo"} | trace_id = "$${__trace.traceId}"'
+      nodeGraph:
+        enabled: true
+
+  # Prometheus — метрики (golden signals)
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    editable: true
