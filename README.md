@@ -43,8 +43,6 @@
 ### Запуск
 
 ```bash
-cd docker-compose-demo
-
 # Запустити весь стек (збірка + старт)
 podman-compose up -d --build
 # або: docker compose up -d --build
