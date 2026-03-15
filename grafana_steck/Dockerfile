@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc \
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-COPY pyproject.toml uv.lock* ./
+COPY ../pyproject.toml uv.lock* ./
 RUN uv venv && uv sync --frozen
 
 ENV PATH="/app/.venv/bin:$PATH"

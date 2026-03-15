@@ -1,0 +1,41 @@
+# Grafana — автоматичне налаштування datasources (Victoria Metrics stack)
+# Цей файл монтується у /etc/grafana/provisioning/datasources/
+
+apiVersion: 1
+
+datasources:
+  # VictoriaLogs — логи (OTel logs через Collector)
+  - name: VictoriaLogs
+    uid: victorialogs
+    type: victoriametrics-logs-datasource
+    access: proxy
+    url: http://victorialogs:9428
+    isDefault: true
+    editable: true
+    jsonData:
+      derivedFields:
+        - matcherType: label
+          matcherRegex: 'trace_id'
+          name: TraceID
+          url: '/explore?schemaVersion=1&panes=%7B%22cad%22%3A%7B%22datasource%22%3A%22victoriatraces%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22jaeger%22%2C%22uid%22%3A%22victoriatraces%22%7D%2C%22query%22%3A%22$${__value.raw}%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-1h%22%2C%22to%22%3A%22now%22%7D%7D%7D&orgId=1'
+          urlDisplayLabel: View trace in VictoriaTraces
+          openInNewTab: true
+
+  # VictoriaTraces — трейси (Jaeger-compatible HTTP API)
+  - name: VictoriaTraces
+    uid: victoriatraces
+    type: jaeger
+    access: proxy
+    url: http://victoriatraces:10428/select/jaeger
+    editable: true
+    jsonData:
+      nodeGraph:
+        enabled: true
+
+  # VictoriaMetrics — метрики (golden signals)
+  - name: VictoriaMetrics
+    uid: victoriametrics
+    type: prometheus
+    access: proxy
+    url: http://victoriametrics:8428
+    editable: true

@@ -149,7 +149,7 @@ instance/
 .scrapy
 
 # Sphinx documentation
-docs/_build/
+grafana_steck/docs/_build/
 
 # PyBuilder
 .pybuilder/

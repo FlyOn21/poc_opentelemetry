@@ -19,7 +19,7 @@
 services:
   # ─── FastAPI додаток з OpenTelemetry ─────────────────────
   fastapi:
-    build: .
+    build: ..
     container_name: fastapi-demo
     ports:
       - "8000:8000"              # API

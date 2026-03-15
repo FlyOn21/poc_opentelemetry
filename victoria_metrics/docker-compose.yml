@@ -1,0 +1,125 @@
+# =============================================================
+# FastAPI + OpenTelemetry + OTel Collector + Victoria Metrics
+# =============================================================
+#
+# Архітектура:
+#
+#   FastAPI ──OTLP/HTTP──> OTel Collector ──otlphttp──────> VictoriaTraces    (трейси)
+#     :8000       :4318    │              ──prometheusrw──> VictoriaMetrics   (метрики)
+#                          │              ──otlphttp──────> VictoriaLogs      (логи)
+#                          └── processors: memory_limiter, batch
+#
+#                          Grafana (VictoriaTraces + VictoriaMetrics + VictoriaLogs)
+#
+# Запуск:     podman-compose up -d --build
+# Зупинка:    podman-compose down -v
+# Логи:       podman logs fastapi-demo
+#
+
+services:
+  # ─── FastAPI додаток з OpenTelemetry ─────────────────────
+  fastapi:
+    build:
+      context: ..
+      dockerfile: victoria_metrics/Dockerfile
+    container_name: fastapi-demo
+    ports:
+      - "8000:8000"              # API
+    environment:
+      - OTEL_SERVICE_NAME=fastapi-demo
+      - OTEL_SERVICE_VERSION=1.0.0
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_ENABLED=true
+      - CHAIN_TARGET_URL=http://fastapi:8000
+    depends_on:
+      - otel-collector
+    mem_limit: 256m
+    restart: unless-stopped
+
+  # ─── OpenTelemetry Collector — OTLP receiver + router ───
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    container_name: otel-collector
+    command: ["--config=/etc/otelcol/otel-collector.yaml"]
+    ports:
+      - "4317:4317"              # OTLP gRPC
+      - "4318:4318"              # OTLP HTTP
+    volumes:
+      - ./otel-collector/otel-collector.yaml:/etc/otelcol/otel-collector.yaml:ro
+    depends_on:
+      - victoriatraces
+      - victorialogs
+      - victoriametrics
+    mem_limit: 256m
+    restart: unless-stopped
+
+  # ─── VictoriaTraces — distributed tracing backend ───────
+  victoriatraces:
+    image: victoriametrics/victoria-traces:latest
+    container_name: victoriatraces
+    ports:
+      - "10428:10428"            # HTTP API
+    volumes:
+      - victoriatraces-data:/victoria-traces-data
+    mem_limit: 256m
+    restart: unless-stopped
+
+  # ─── VictoriaMetrics — metrics TSDB ─────────────────────
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:latest
+    container_name: victoriametrics
+    ports:
+      - "8428:8428"              # HTTP API + PromQL
+    command:
+      - "--storageDataPath=/victoria-metrics-data"
+      - "--retentionPeriod=1d"
+      - "--httpListenAddr=:8428"
+    volumes:
+      - victoriametrics-data:/victoria-metrics-data
+    mem_limit: 256m
+    restart: unless-stopped
+
+  # ─── VictoriaLogs — log aggregation ─────────────────────
+  victorialogs:
+    image: victoriametrics/victoria-logs:latest
+    container_name: victorialogs
+    ports:
+      - "9428:9428"              # HTTP API + OTLP logs
+    command:
+      - "-storageDataPath=/vlogs"
+      - "-httpListenAddr=:9428"
+    volumes:
+      - victorialogs-data:/vlogs
+    mem_limit: 256m
+    restart: unless-stopped
+
+  # ─── Grafana — visualization ────────────────────────────
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: grafana
+    ports:
+      - "3000:3000"              # Grafana UI
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_INSTALL_PLUGINS=https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v0.26.3/victoriametrics-logs-datasource-v0.26.3.zip;victoriametrics-logs-datasource
+      - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=victoriametrics-logs-datasource
+    volumes:
+      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./grafana/dashboards-provisioning.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - victorialogs
+      - victoriatraces
+      - victoriametrics
+    mem_limit: 256m
+    restart: unless-stopped
+
+volumes:
+  victoriatraces-data:
+  victoriametrics-data:
+  victorialogs-data:
+  grafana-data:

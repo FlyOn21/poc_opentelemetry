@@ -1,0 +1,62 @@
+# OpenTelemetry Collector — Victoria Metrics stack
+# Приймає OTLP від FastAPI, маршрутизує до VictoriaTraces / VictoriaMetrics / VictoriaLogs
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 200
+    spike_limit_mib: 50
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+  # Копіюємо severity → level для VictoriaLogs detected_level
+  transform/logs:
+    log_statements:
+      - context: log
+        statements:
+          - set(attributes["level"], ConvertCase(severity_text, "lower"))
+
+exporters:
+  # Трейси → VictoriaTraces (OTLP HTTP)
+  otlphttp/victoriatraces:
+    endpoint: http://victoriatraces:10428/insert/opentelemetry
+    tls:
+      insecure: true
+
+  # Метрики → VictoriaMetrics (Prometheus Remote Write)
+  prometheusremotewrite:
+    endpoint: http://victoriametrics:8428/api/v1/write
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  # Логи → VictoriaLogs (OTLP HTTP)
+  otlphttp/victorialogs:
+    endpoint: http://victorialogs:9428/insert/opentelemetry
+    tls:
+      insecure: true
+
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/victoriatraces, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheusremotewrite, debug]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/logs, batch]
+      exporters: [otlphttp/victorialogs, debug]
