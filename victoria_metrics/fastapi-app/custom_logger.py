@@ -79,7 +79,7 @@ class InterceptHandler(logging.Handler):
         return message
 
 
-def create_unified_logger(
+def create_otel_logger(
         name: str = str(uuid.uuid4()),
         logging_level: str = DEFAULT_LOGGING_LEVEL,
         logging_format: str = DEFAULT_FORMAT,

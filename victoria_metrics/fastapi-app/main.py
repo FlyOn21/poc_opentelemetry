@@ -11,11 +11,11 @@ from opentelemetry import trace
 from opentelemetry.trace import StatusCode
 import logging as _logging
 
-from custom_logger import create_unified_logger
+from custom_logger import create_otel_logger
 from otel_loguru import LoguruOTelHandler, format_traceback, _otel_color_format
 from otel_manager import OTelManager
 
-logger = create_unified_logger(
+logger = create_otel_logger(
     name="main-fastapi-demo", logging_level="DEBUG", backtrace=True, logging_diagnose=True)
 
 # --- OpenTelemetry setup ---
